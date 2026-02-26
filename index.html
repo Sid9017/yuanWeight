@@ -147,6 +147,13 @@ body{display:flex;flex-direction:column}
 .empty{text-align:center;padding:40px 0;color:var(--text3);font-size:14px}
 .empty .empty-icon{font-size:48px;margin-bottom:8px;display:block}
 
+/* Loading overlay */
+.loading-overlay{position:fixed;inset:0;background:rgba(255,255,255,.7);z-index:300;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+.loading-overlay.show{display:flex}
+.loading-spinner{width:40px;height:40px;border:4px solid #d0f0e0;border-top-color:var(--g1);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{color:var(--g2);font-size:14px;font-weight:600}
+
 @media(min-width:500px){.content{max-width:500px;margin:0 auto}}
 </style>
 </head>
@@ -242,6 +249,12 @@ body{display:flex;flex-direction:column}
   </div>
 </div>
 
+<!-- Loading -->
+<div class="loading-overlay" id="loading">
+  <div class="loading-spinner"></div>
+  <div class="loading-text" id="loading-text">加入中...</div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -316,6 +329,8 @@ function todayStr(){const d=new Date();return `${d.getFullYear()}-${String(d.get
 function toast(msg,ms=2000){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),ms);}
 function closeModal(id){document.getElementById(id).classList.remove('show');}
 function getUrlParam(k){return new URLSearchParams(location.search).get(k);}
+function showLoading(text){document.getElementById('loading-text').textContent=text||'加载中...';document.getElementById('loading').classList.add('show');}
+function hideLoading(){document.getElementById('loading').classList.remove('show');}
 
 // ===== Auth =====
 async function joinGroup(){
@@ -324,6 +339,7 @@ async function joinGroup(){
   if(!nick)return toast('请输入昵称');
   if(!group)return toast('请输入群组口令');
   if(!initSupabase())return;
+  showLoading('加入群组中...');
   try{
     const{data:rows,error:qErr}=await db.from('members').select('id').eq('nickname',nick).eq('group_code',group).limit(1);
     if(qErr)throw qErr;
@@ -336,8 +352,9 @@ async function joinGroup(){
     }
     state.nickname=nick;state.groupCode=group;
     localStorage.setItem('wt_member',JSON.stringify({id:state.memberId,nick,group}));
-    enterApp();
+    await enterApp();
   }catch(e){console.error(e);toast('加入失败: '+(e.message||e||'网络错误'));}
+  finally{hideLoading();}
 }
 
 async function createGroup(){
@@ -346,22 +363,25 @@ async function createGroup(){
   if(!initSupabase())return;
   const group='G'+Math.random().toString(36).substring(2,8).toUpperCase();
   document.getElementById('input-group').value=group;
+  showLoading('创建群组中...');
   try{
     const{data,error}=await db.from('members').insert({nickname:nick,group_code:group}).select('id').single();
     if(error)throw error;
     state.memberId=data.id;state.nickname=nick;state.groupCode=group;
     localStorage.setItem('wt_member',JSON.stringify({id:state.memberId,nick,group}));
-    toast('群组已创建，口令: '+group); enterApp();
+    toast('群组已创建，口令: '+group); await enterApp();
   }catch(e){console.error(e);toast('创建失败');}
+  finally{hideLoading();}
 }
 
 async function tryAutoLogin(){
   const s=localStorage.getItem('wt_member');
   if(!s){const g=getUrlParam('group');if(g)document.getElementById('input-group').value=g;return;}
   if(!initSupabase())return;
+  showLoading('加载中...');
   const{id,nick,group}=JSON.parse(s);
   state.memberId=id;state.nickname=nick;state.groupCode=group;
-  enterApp();
+  try{await enterApp();}finally{hideLoading();}
 }
 
 function logout(){if(!confirm('确定退出？'))return;localStorage.removeItem('wt_member');location.reload();}
