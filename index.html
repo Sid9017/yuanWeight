@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>体重打卡</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --g1:#43b97f;--g2:#2d8a5e;--g3:#e8f7f0;--g4:#d0f0e0;
+  --bg:#f0f7f3;--card:#fff;--text:#1a3a2a;--text2:#4a6a5a;--text3:#8aaa9a;
+  --shadow:0 2px 12px rgba(45,138,94,.1);--radius:14px;
+  --danger:#e85d5d;
+}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);font-size:15px;-webkit-tap-highlight-color:transparent;scrollbar-width:none;-ms-overflow-style:none}
+::-webkit-scrollbar{display:none}
+body{display:flex;flex-direction:column}
+
+.page{display:none;flex:1;flex-direction:column;height:100%}
+.page.active{display:flex}
+
+/* Setup */
+#page-setup{justify-content:center;align-items:center;padding:32px;background:linear-gradient(150deg,#43b97f 0%,#2d8a5e 100%);min-height:100vh}
+.setup-card{background:#fff;border-radius:20px;padding:40px 28px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.12);text-align:center}
+.setup-card h1{font-size:28px;margin-bottom:6px;color:var(--g2)}
+.setup-card .subtitle{color:var(--text3);font-size:14px;margin-bottom:32px}
+.setup-card .logo{font-size:56px;margin-bottom:16px;display:block}
+.form-group{margin-bottom:20px;text-align:left}
+.form-group label{display:block;font-size:13px;color:var(--text2);margin-bottom:6px;font-weight:600}
+.form-group input{width:100%;height:46px;border:1.5px solid #c8e0d4;border-radius:10px;padding:0 14px;font-size:15px;outline:none;transition:border .2s;background:#fff}
+.form-group input:focus{border-color:var(--g1)}
+.form-group .hint{font-size:12px;color:var(--text3);margin-top:4px}
+.btn{display:block;width:100%;height:48px;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;transition:all .15s}
+.btn-primary{background:var(--g1);color:#fff}
+.btn-primary:active{background:var(--g2)}
+.btn-outline{background:transparent;border:1.5px solid var(--g1);color:var(--g1);margin-top:12px}
+.btn-outline:active{background:var(--g3)}
+.divider{display:flex;align-items:center;margin:24px 0;color:var(--text3);font-size:13px}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:#c8e0d4}
+.divider::before{margin-right:12px}
+.divider::after{margin-left:12px}
+
+/* Header */
+.header{background:linear-gradient(135deg,#43b97f 0%,#2d8a5e 100%);color:#fff;padding:14px 20px;flex-shrink:0}
+.header-row{display:flex;justify-content:space-between;align-items:center}
+.header .group-name{font-size:17px;font-weight:700}
+.header .group-info{font-size:12px;opacity:.8;margin-top:2px}
+.header-actions{display:flex;gap:8px}
+.header-btn{background:rgba(255,255,255,.2);color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer}
+.header-btn:active{background:rgba(255,255,255,.35)}
+
+/* Content */
+.content{flex:1;overflow-y:auto;padding-bottom:64px;-webkit-overflow-scrolling:touch}
+.tab-panel{display:none;padding:16px}
+.tab-panel.active{display:block}
+
+/* Tab bar */
+.tab-bar{position:fixed;bottom:0;left:0;right:0;height:56px;background:#fff;border-top:1px solid #d0e8da;display:flex;z-index:100}
+.tab-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:var(--text3);font-size:11px;transition:color .2s;-webkit-tap-highlight-color:transparent}
+.tab-item.active{color:var(--g1)}
+.tab-item svg{width:24px;height:24px;margin-bottom:2px;fill:currentColor}
+
+/* Cards */
+.card{background:var(--card);border-radius:var(--radius);padding:20px;margin-bottom:14px;box-shadow:var(--shadow)}
+.card-title{font-size:16px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px;color:var(--g2)}
+
+/* Date selector */
+.date-selector{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.date-selector input[type="date"]{flex:1;height:42px;border:1.5px solid #c8e0d4;border-radius:10px;padding:0 12px;font-size:15px;outline:none;color:var(--text);background:#fff}
+.date-selector input[type="date"]:focus{border-color:var(--g1)}
+.date-today-btn{height:42px;padding:0 14px;border:1.5px solid var(--g1);border-radius:10px;background:var(--g3);color:var(--g2);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.date-today-btn:active{background:var(--g4)}
+
+/* Checkin */
+.checkin-status{text-align:center;padding:16px 0}
+.checkin-status .big-num{font-size:52px;font-weight:800;color:var(--g1);line-height:1.1}
+.checkin-status .unit{font-size:18px;color:var(--text3);margin-left:4px}
+.checkin-status .label{font-size:13px;color:var(--text3);margin-top:4px}
+.checkin-status .change{font-size:14px;margin-top:8px;font-weight:600}
+.change-down{color:var(--g1)}
+.change-up{color:var(--danger)}
+.change-same{color:var(--text3)}
+
+.weight-input-wrap{display:flex;gap:10px;align-items:center;margin-bottom:16px}
+.weight-input-wrap input{flex:1;height:52px;border:2px solid #c8e0d4;border-radius:12px;text-align:center;font-size:28px;font-weight:700;outline:none;transition:border .2s}
+.weight-input-wrap input:focus{border-color:var(--g1)}
+.weight-input-wrap .unit-label{font-size:16px;color:var(--text3);flex-shrink:0}
+
+/* Stats */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.stat-item{background:var(--g3);border-radius:10px;padding:14px;text-align:center}
+.stat-item .stat-val{font-size:22px;font-weight:800;color:var(--g2)}
+.stat-item .stat-label{font-size:12px;color:var(--text3);margin-top:2px}
+
+/* Chart */
+.chart-box{width:100%;height:340px;margin:6px 0}
+
+/* Rank list */
+.rank-row{position:relative;padding:16px 16px 20px;margin-bottom:12px;border-radius:14px;background:#fff;overflow:hidden;box-shadow:0 2px 10px rgba(45,138,94,.07);transition:transform .15s}
+.rank-row.is-me{background:linear-gradient(135deg,#e8f7f0 0%,#d0f0e0 100%)}
+.rank-row-top{display:flex;align-items:center;gap:14px}
+.rank-pos{font-size:28px;font-weight:900;width:38px;text-align:center;flex-shrink:0;color:#c8ddd2;font-variant-numeric:tabular-nums}
+.rank-row:nth-child(1) .rank-pos{background:linear-gradient(135deg,#FFD700,#FF8C00);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:32px}
+.rank-row:nth-child(2) .rank-pos{background:linear-gradient(135deg,#C0C0C0,#808080);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:32px}
+.rank-row:nth-child(3) .rank-pos{background:linear-gradient(135deg,#CD7F32,#8B4513);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:32px}
+.rank-body{flex:1;min-width:0}
+.rank-name{font-size:16px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px}
+.rank-name .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.rank-name .me-tag{font-size:11px;background:var(--g1);color:#fff;padding:1px 6px;border-radius:4px;font-weight:600}
+.rank-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}
+.rank-pill{font-size:12px;color:var(--text2);background:var(--bg);padding:2px 8px;border-radius:6px;white-space:nowrap}
+.rank-pill b{color:var(--text);font-weight:700}
+.rank-val{text-align:right;flex-shrink:0;margin-left:8px}
+.rank-val-num{font-size:30px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
+.rank-val-num.down{color:var(--g1)}
+.rank-val-num.up{color:var(--danger)}
+.rank-val-unit{font-size:12px;color:var(--text3);text-align:right;margin-top:2px}
+
+.rank-bar{position:absolute;left:0;bottom:0;height:4px;border-radius:0 4px 0 0;transition:width .8s cubic-bezier(.22,1,.36,1)}
+.rank-row:nth-child(1) .rank-bar{height:5px}
+
+.rank-expand-btn{display:block;width:100%;padding:12px;text-align:center;color:var(--g1);font-size:14px;font-weight:600;cursor:pointer;background:var(--g3);border:none;border-radius:10px;margin-top:6px;transition:background .15s}
+.rank-expand-btn:active{background:var(--g4)}
+
+/* History in checkin */
+.history-item{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #e8f0ec;font-size:14px}
+.history-item:last-child{border-bottom:none}
+.history-date{color:var(--text3)}
+.history-weight{font-weight:700}
+.history-actions{display:flex;align-items:center;gap:8px}
+.btn-edit-sm{background:none;border:1px solid #c8e0d4;color:var(--text2);padding:3px 10px;border-radius:6px;font-size:12px;cursor:pointer}
+.btn-edit-sm:active{background:var(--g3)}
+
+/* Toast */
+.toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.8);background:rgba(26,58,42,.85);color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;z-index:9999;opacity:0;transition:all .3s;pointer-events:none}
+.toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(26,58,42,.35);z-index:200;display:none;align-items:center;justify-content:center;padding:24px}
+.modal-overlay.show{display:flex}
+.modal{background:#fff;border-radius:16px;padding:28px 24px;width:100%;max-width:340px}
+.modal h3{font-size:18px;margin-bottom:16px;text-align:center;color:var(--g2)}
+.modal .btn{margin-top:10px}
+
+.empty{text-align:center;padding:40px 0;color:var(--text3);font-size:14px}
+.empty .empty-icon{font-size:48px;margin-bottom:8px;display:block}
+
+@media(min-width:500px){.content{max-width:500px;margin:0 auto}}
+</style>
+</head>
+<body>
+
+<!-- Setup -->
+<div id="page-setup" class="page active">
+  <div class="setup-card">
+    <span class="logo">⚖️</span>
+    <h1>体重打卡</h1>
+    <p class="subtitle">微信群每日打卡 · 互相监督减肥</p>
+    <div class="form-group">
+      <label>你的昵称</label>
+      <input type="text" id="input-nick" placeholder="输入你的昵称" maxlength="20">
+    </div>
+    <div class="form-group">
+      <label>群组口令</label>
+      <input type="text" id="input-group" placeholder="输入群组口令加入" maxlength="30">
+      <p class="hint">同一微信群的人输入相同口令即可互相看到数据</p>
+    </div>
+    <button class="btn btn-primary" onclick="joinGroup()">加入群组</button>
+    <div class="divider">或</div>
+    <button class="btn btn-outline" onclick="createGroup()">创建新群组</button>
+  </div>
+</div>
+
+<!-- Main -->
+<div id="page-main" class="page">
+  <div class="header">
+    <div class="header-row">
+      <div>
+        <div class="group-name" id="disp-group-name">体重打卡群</div>
+        <div class="group-info" id="disp-group-info">口令: *** · 0人</div>
+      </div>
+      <div class="header-actions">
+        <button class="header-btn" onclick="showShareModal()">分享</button>
+        <button class="header-btn" onclick="showSettingsModal()">设置</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- 打卡 -->
+    <div class="tab-panel active" id="panel-checkin">
+      <div class="card">
+        <div class="card-title">📅 体重打卡</div>
+        <div class="date-selector">
+          <input type="date" id="input-date" onchange="onDateChange()">
+          <button class="date-today-btn" onclick="setToday()">今天</button>
+        </div>
+        <div id="checkin-area"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🔥 我的概况</div>
+        <div class="stats-grid">
+          <div class="stat-item"><div class="stat-val" id="stat-streak">0</div><div class="stat-label">连续打卡(天)</div></div>
+          <div class="stat-item"><div class="stat-val" id="stat-total">0</div><div class="stat-label">累计打卡(天)</div></div>
+          <div class="stat-item"><div class="stat-val" id="stat-start">--</div><div class="stat-label">初始体重</div></div>
+          <div class="stat-item"><div class="stat-val" id="stat-change">--</div><div class="stat-label">累计变化</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">📋 我的记录</div>
+        <div id="my-history-list"></div>
+      </div>
+    </div>
+
+    <!-- 榜单 -->
+    <div class="tab-panel" id="panel-rank">
+      <div class="card">
+        <div class="card-title">📈 累计减重趋势</div>
+        <p style="font-size:12px;color:var(--text3);margin:-8px 0 8px">每人从首次记录开始，展示累计减掉的公斤数 — 左右滑动查看更多日期</p>
+        <div class="chart-box" id="chart-cum-trend"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🏆 减重排行榜</div>
+        <div id="rank-cards-list"></div>
+        <button class="rank-expand-btn" id="rank-expand-btn" style="display:none" onclick="toggleRankExpand()">展开全部</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab Bar -->
+  <div class="tab-bar">
+    <div class="tab-item active" onclick="switchTab('checkin',this)">
+      <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+      <span>打卡</span>
+    </div>
+    <div class="tab-item" onclick="switchTab('rank',this)">
+      <svg viewBox="0 0 24 24"><path d="M7 4V2H17V4H20V11C20 12.1 19.1 13 18 13H15.42L15.74 14.43L19 18H5L8.26 14.43L8.58 13H6C4.9 13 4 12.1 4 11V4H7ZM6 6V11H10L12 9L14 11H18V6H6Z"/></svg>
+      <span>榜单</span>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Share Modal -->
+<div class="modal-overlay" id="modal-share">
+  <div class="modal">
+    <h3>邀请好友加入</h3>
+    <p style="font-size:14px;color:var(--text2);margin-bottom:12px;text-align:center">将以下信息发送到微信群：</p>
+    <div style="background:var(--g3);border-radius:10px;padding:14px;font-size:14px;line-height:1.8;color:var(--text)" id="share-text"></div>
+    <button class="btn btn-primary" onclick="copyShareText()">复制邀请信息</button>
+    <button class="btn btn-outline" onclick="closeModal('modal-share')">关闭</button>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="modal-settings">
+  <div class="modal">
+    <h3>设置</h3>
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #e8f0ec">
+        <span>昵称</span><span style="color:var(--text3)" id="set-nick-val">--</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #e8f0ec">
+        <span>群组口令</span><span style="color:var(--text3)" id="set-group-val">--</span>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="closeModal('modal-settings');showRenameModal()">修改昵称</button>
+    <button class="btn btn-outline" style="border-color:var(--danger);color:var(--danger)" onclick="logout()">退出群组</button>
+    <button class="btn btn-outline" onclick="closeModal('modal-settings')">关闭</button>
+  </div>
+</div>
+
+<!-- Rename Modal -->
+<div class="modal-overlay" id="modal-rename">
+  <div class="modal">
+    <h3>修改昵称</h3>
+    <div class="form-group">
+      <input type="text" id="input-rename" placeholder="输入新昵称" maxlength="20">
+    </div>
+    <button class="btn btn-primary" onclick="doRename()">确认修改</button>
+    <button class="btn btn-outline" onclick="closeModal('modal-rename')">取消</button>
+  </div>
+</div>
+
+<!-- Edit Weight Modal -->
+<div class="modal-overlay" id="modal-edit-weight">
+  <div class="modal">
+    <h3 id="edit-weight-title">修改体重</h3>
+    <div class="form-group">
+      <label>体重 (kg)</label>
+      <input type="number" id="input-edit-weight" step="0.1" min="20" max="300" inputmode="decimal">
+    </div>
+    <button class="btn btn-primary" onclick="doEditWeight()">确认</button>
+    <button class="btn btn-outline" onclick="closeModal('modal-edit-weight')">取消</button>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://tzigzannkujywkftmzkj.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6aWd6YW5ua3VqeXdrZnRtemtqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMDc2OTIsImV4cCI6MjA4NzY4MzY5Mn0.XGYR5h2ci4QDyM_Bq5O6qOHnqxx0k7MJ7P7odL4hMQg';
+
+const COLORS = ['#FF9F43','#00C9DB','#4ADE80','#F472B6','#A78BFA','#FB923C','#38BDF8','#FBBF24','#E879F9','#34D399'];
+
+let db=null, editingLogId=null;
+let state={memberId:null,nickname:'',groupCode:'',selectedDate:'',myLogs:[],members:[],allLogs:[]};
+
+function initSupabase(){
+  if(SUPABASE_URL==='YOUR_SUPABASE_URL'){toast('请先配置 Supabase！');return false;}
+  db=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY); return true;
+}
+function todayStr(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function toast(msg,ms=2000){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),ms);}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+function getUrlParam(k){return new URLSearchParams(location.search).get(k);}
+
+// ===== Auth =====
+async function joinGroup(){
+  const nick=document.getElementById('input-nick').value.trim();
+  const group=document.getElementById('input-group').value.trim();
+  if(!nick)return toast('请输入昵称');
+  if(!group)return toast('请输入群组口令');
+  if(!initSupabase())return;
+  try{
+    const{data:rows,error:qErr}=await db.from('members').select('id').eq('nickname',nick).eq('group_code',group).limit(1);
+    if(qErr)throw qErr;
+    if(rows&&rows.length>0){
+      state.memberId=rows[0].id;
+    }else{
+      const{data,error}=await db.from('members').insert({nickname:nick,group_code:group}).select('id').single();
+      if(error)throw error;
+      state.memberId=data.id;
+    }
+    state.nickname=nick;state.groupCode=group;
+    localStorage.setItem('wt_member',JSON.stringify({id:state.memberId,nick,group}));
+    enterApp();
+  }catch(e){console.error(e);toast('加入失败: '+(e.message||e||'网络错误'));}
+}
+
+async function createGroup(){
+  const nick=document.getElementById('input-nick').value.trim();
+  if(!nick)return toast('请先输入昵称');
+  if(!initSupabase())return;
+  const group='G'+Math.random().toString(36).substring(2,8).toUpperCase();
+  document.getElementById('input-group').value=group;
+  try{
+    const{data,error}=await db.from('members').insert({nickname:nick,group_code:group}).select('id').single();
+    if(error)throw error;
+    state.memberId=data.id;state.nickname=nick;state.groupCode=group;
+    localStorage.setItem('wt_member',JSON.stringify({id:state.memberId,nick,group}));
+    toast('群组已创建，口令: '+group); enterApp();
+  }catch(e){console.error(e);toast('创建失败');}
+}
+
+async function tryAutoLogin(){
+  const s=localStorage.getItem('wt_member');
+  if(!s){const g=getUrlParam('group');if(g)document.getElementById('input-group').value=g;return;}
+  if(!initSupabase())return;
+  const{id,nick,group}=JSON.parse(s);
+  state.memberId=id;state.nickname=nick;state.groupCode=group;
+  enterApp();
+}
+
+function logout(){if(!confirm('确定退出？'))return;localStorage.removeItem('wt_member');location.reload();}
+
+// ===== Main =====
+async function enterApp(){
+  document.getElementById('page-setup').classList.remove('active');
+  document.getElementById('page-main').classList.add('active');
+  state.selectedDate=todayStr();
+  document.getElementById('input-date').value=state.selectedDate;
+  document.getElementById('input-date').max=todayStr();
+  await loadAllData(); renderAll();
+}
+
+async function loadAllData(){
+  try{
+    const[mR,lR]=await Promise.all([
+      db.from('members').select('*').eq('group_code',state.groupCode).order('created_at'),
+      db.from('weight_logs').select('*, members!inner(nickname, group_code)')
+        .eq('members.group_code',state.groupCode).order('log_date',{ascending:true})
+    ]);
+    state.members=mR.data||[];
+    state.allLogs=(lR.data||[]).map(l=>({...l,nickname:l.members?.nickname}));
+    state.myLogs=state.allLogs.filter(l=>l.member_id===state.memberId);
+  }catch(e){console.error(e);toast('数据加载失败');}
+}
+
+let rankExpanded=false;
+function renderAll(){renderHeader();renderCheckin();renderMyStats();renderHistory();renderRankCards();renderCumChart();}
+
+// ===== Header =====
+function renderHeader(){
+  document.getElementById('disp-group-info').textContent=`口令: ${state.groupCode} · ${state.members.length}人`;
+}
+
+// ===== Checkin =====
+function onDateChange(){state.selectedDate=document.getElementById('input-date').value;renderCheckin();}
+function setToday(){state.selectedDate=todayStr();document.getElementById('input-date').value=state.selectedDate;renderCheckin();}
+function getSelectedLog(){return state.myLogs.find(l=>l.log_date===state.selectedDate)||null;}
+
+function renderCheckin(){
+  const area=document.getElementById('checkin-area');
+  const log=getSelectedLog();
+  const isToday=state.selectedDate===todayStr();
+  const dl=isToday?'今天':state.selectedDate;
+  if(log){
+    const idx=state.myLogs.indexOf(log);
+    const prev=idx>0?state.myLogs[idx-1]:null;
+    let ch='';
+    if(prev){
+      const d=(log.weight-prev.weight).toFixed(1);
+      const cls=d<0?'change-down':d>0?'change-up':'change-same';
+      ch=`<div class="change ${cls}">较上次 ${d>0?'+':''}${d} kg</div>`;
+    }
+    area.innerHTML=`
+      <div class="checkin-status">
+        <span class="big-num">${log.weight}<span class="unit">kg</span></span>
+        <div class="label">${dl} 已打卡</div>${ch}
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline" style="flex:1" onclick="showModify()">修改体重</button>
+        <button class="btn btn-outline" style="flex:1;border-color:var(--danger);color:var(--danger)" onclick="deleteLog('${log.id}')">删除</button>
+      </div>
+      <div id="modify-area" style="display:none;margin-top:16px">
+        <div class="weight-input-wrap">
+          <input type="number" id="input-modify-w" step="0.1" min="20" max="300" value="${log.weight}" inputmode="decimal">
+          <span class="unit-label">kg</span>
+        </div>
+        <button class="btn btn-primary" onclick="doModify('${log.id}')">确认修改</button>
+      </div>`;
+  }else{
+    area.innerHTML=`
+      <div style="text-align:center;padding:10px 0 16px">
+        <span style="font-size:40px">${isToday?'🎯':'📝'}</span>
+        <p style="color:var(--text3);margin-top:8px">${isToday?'今天还没打卡，快来记录吧！':'该日期暂无记录，可以补打卡'}</p>
+      </div>
+      <div class="weight-input-wrap">
+        <input type="number" id="input-new-w" step="0.1" min="20" max="300" placeholder="0.0" inputmode="decimal">
+        <span class="unit-label">kg</span>
+      </div>
+      <button class="btn btn-primary" onclick="submitWeight()">打卡</button>`;
+  }
+}
+
+function showModify(){document.getElementById('modify-area').style.display='block';}
+
+async function submitWeight(){
+  const v=parseFloat(document.getElementById('input-new-w').value);
+  if(!v||v<20||v>300)return toast('请输入有效体重 (20-300 kg)');
+  try{
+    const{error}=await db.from('weight_logs').insert({member_id:state.memberId,weight:v,log_date:state.selectedDate});
+    if(error)throw error;
+    toast('打卡成功！');await loadAllData();renderAll();
+  }catch(e){console.error(e);toast('打卡失败: '+(e.message||'网络错误'));}
+}
+
+async function doModify(id){
+  const v=parseFloat(document.getElementById('input-modify-w').value);
+  if(!v||v<20||v>300)return toast('请输入有效体重');
+  try{
+    const{error}=await db.from('weight_logs').update({weight:v}).eq('id',id);
+    if(error)throw error;
+    toast('修改成功！');await loadAllData();renderAll();
+  }catch(e){toast('修改失败');}
+}
+
+async function deleteLog(id){
+  if(!confirm('确定删除？'))return;
+  try{
+    const{error}=await db.from('weight_logs').delete().eq('id',id);
+    if(error)throw error;
+    toast('已删除');await loadAllData();renderAll();
+  }catch(e){toast('删除失败');}
+}
+
+// ===== Stats =====
+function renderMyStats(){
+  const logs=state.myLogs;
+  document.getElementById('stat-total').textContent=logs.length;
+  if(logs.length>0){
+    document.getElementById('stat-start').textContent=logs[0].weight+' kg';
+    const d=(logs[logs.length-1].weight-logs[0].weight).toFixed(1);
+    const el=document.getElementById('stat-change');
+    el.textContent=(d>0?'+':'')+d+' kg';
+    el.style.color=d<0?'var(--g2)':d>0?'var(--danger)':'var(--text3)';
+  }else{document.getElementById('stat-start').textContent='--';document.getElementById('stat-change').textContent='--';}
+  let streak=0;const logDates=new Set(logs.map(l=>l.log_date));const dd=new Date();
+  if(!logDates.has(todayStr()))dd.setDate(dd.getDate()-1);
+  while(true){const ds=`${dd.getFullYear()}-${String(dd.getMonth()+1).padStart(2,'0')}-${String(dd.getDate()).padStart(2,'0')}`;if(logDates.has(ds)){streak++;dd.setDate(dd.getDate()-1);}else break;}
+  document.getElementById('stat-streak').textContent=streak;
+}
+
+// ===== History =====
+function renderHistory(){
+  const c=document.getElementById('my-history-list');
+  const logs=[...state.myLogs].reverse();
+  if(!logs.length){c.innerHTML='<div class="empty">暂无记录</div>';return;}
+  c.innerHTML=logs.slice(0,50).map((l,i)=>{
+    const prev=i<logs.length-1?logs[i+1]:null;
+    let badge='';
+    if(prev){const d=(l.weight-prev.weight).toFixed(1);badge=`<span class="${d<0?'change-down':d>0?'change-up':'change-same'}" style="font-size:13px;margin-right:6px">${d>0?'+':''}${d}</span>`;}
+    return `<div class="history-item"><span class="history-date">${l.log_date}</span><div class="history-actions">${badge}<span class="history-weight">${l.weight} kg</span><button class="btn-edit-sm" onclick="openEditModal('${l.id}',${l.weight},'${l.log_date}')">改</button></div></div>`;
+  }).join('');
+}
+
+function openEditModal(id,w,date){
+  editingLogId=id;
+  document.getElementById('edit-weight-title').textContent='修改 '+date+' 的体重';
+  document.getElementById('input-edit-weight').value=w;
+  document.getElementById('modal-edit-weight').classList.add('show');
+}
+
+async function doEditWeight(){
+  const v=parseFloat(document.getElementById('input-edit-weight').value);
+  if(!v||v<20||v>300)return toast('请输入有效体重');
+  try{
+    const{error}=await db.from('weight_logs').update({weight:v}).eq('id',editingLogId);
+    if(error)throw error;
+    closeModal('modal-edit-weight');toast('修改成功！');await loadAllData();renderAll();
+  }catch(e){toast('修改失败');}
+}
+
+// ===== 榜单：排行榜卡片 =====
+function buildRankData(){
+  const memberMap={};
+  state.allLogs.forEach(l=>{
+    if(!memberMap[l.member_id])memberMap[l.member_id]={id:l.member_id,nickname:l.nickname,logs:[]};
+    memberMap[l.member_id].logs.push(l);
+  });
+  const rankings=[];
+  Object.values(memberMap).forEach((m,i)=>{
+    const sorted=m.logs.sort((a,b)=>a.log_date.localeCompare(b.log_date));
+    const first=sorted[0], last=sorted[sorted.length-1];
+    const change=last.weight-first.weight;
+    const d0=new Date(first.log_date), d1=new Date(last.log_date);
+    const days=Math.round((d1-d0)/(86400000))+1;
+    rankings.push({
+      id:m.id, nickname:m.nickname, color:COLORS[i%COLORS.length],
+      firstW:first.weight, lastW:last.weight,
+      change, count:sorted.length, days,
+      absChange:Math.abs(change)
+    });
+  });
+  rankings.sort((a,b)=>a.change-b.change);
+  return rankings;
+}
+
+function renderRankCards(){
+  const c=document.getElementById('rank-cards-list');
+  const btn=document.getElementById('rank-expand-btn');
+  const rankings=buildRankData();
+  if(!rankings.length){c.innerHTML='<div class="empty"><span class="empty-icon">🏆</span>暂无打卡数据</div>';btn.style.display='none';return;}
+
+  const maxAbs=Math.max(...rankings.map(r=>r.absChange),0.1);
+  const limit=rankExpanded?rankings.length:Math.min(10,rankings.length);
+
+  c.innerHTML=rankings.slice(0,limit).map((r,i)=>{
+    const isMe=r.id===state.memberId;
+    const diff=r.change.toFixed(1);
+    const cls=diff<=0?'down':'up';
+    const sign=diff>0?'+':'';
+    const pct=Math.round((r.absChange/maxAbs)*100);
+    const barColor=diff<=0
+      ?`linear-gradient(90deg,${r.color},${r.color}aa)`
+      :`linear-gradient(90deg,#e85d5d,#e85d5daa)`;
+    return `<div class="rank-row${isMe?' is-me':''}">
+      <div class="rank-row-top">
+        <div class="rank-pos">${i+1}</div>
+        <div class="rank-body">
+          <div class="rank-name">
+            <span class="dot" style="background:${r.color}"></span>
+            ${r.nickname}
+            ${isMe?'<span class="me-tag">我</span>':''}
+          </div>
+          <div class="rank-meta">
+            <span class="rank-pill">起始 <b>${r.firstW}</b></span>
+            <span class="rank-pill">最新 <b>${r.lastW}</b></span>
+            <span class="rank-pill"><b>${r.count}</b>次</span>
+            <span class="rank-pill"><b>${r.days}</b>天</span>
+          </div>
+        </div>
+        <div class="rank-val">
+          <div class="rank-val-num ${cls}">${sign}${diff}</div>
+          <div class="rank-val-unit">kg</div>
+        </div>
+      </div>
+      <div class="rank-bar" style="width:${pct}%;background:${barColor}"></div>
+    </div>`;
+  }).join('');
+
+  if(rankings.length>10){
+    btn.style.display='block';
+    btn.textContent=rankExpanded?'收起':'展开全部 ('+rankings.length+'人)';
+  }else{btn.style.display='none';}
+}
+
+function toggleRankExpand(){
+  rankExpanded=!rankExpanded;
+  renderRankCards();
+}
+
+// ===== 榜单：累计减重趋势图（支持拖拽滑动） =====
+let cumChart=null;
+function renderCumChart(){
+  const c=document.getElementById('chart-cum-trend');
+  const memberMap={};
+  state.allLogs.forEach(l=>{
+    if(!memberMap[l.member_id])memberMap[l.member_id]={nickname:l.nickname,logs:[]};
+    memberMap[l.member_id].logs.push(l);
+  });
+  const entries=Object.values(memberMap);
+  if(!entries.length){c.innerHTML='<div class="empty"><span class="empty-icon">📈</span>暂无数据</div>';return;}
+
+  const allDatesSet=new Set();
+  state.allLogs.forEach(l=>allDatesSet.add(l.log_date));
+  const allDates=[...allDatesSet].sort();
+
+  const series=[];
+  entries.forEach((m,i)=>{
+    const sorted=m.logs.sort((a,b)=>a.log_date.localeCompare(b.log_date));
+    const firstW=sorted[0].weight;
+    const logMap={};sorted.forEach(l=>{logMap[l.log_date]=l.weight;});
+    const data=allDates.map(d=>logMap[d]!==undefined?parseFloat((firstW-logMap[d]).toFixed(1)):null);
+    series.push({
+      name:m.nickname,type:'line',data,smooth:true,connectNulls:true,
+      symbol:'circle',symbolSize:6,
+      lineStyle:{width:3,color:COLORS[i%COLORS.length]},
+      itemStyle:{color:COLORS[i%COLORS.length]}
+    });
+  });
+
+  c.innerHTML='';
+  if(cumChart){cumChart.dispose();cumChart=null;}
+  cumChart=echarts.init(c);
+
+  const showDays = 14;
+  const startPct = allDates.length>showDays ? Math.round((1-showDays/allDates.length)*100) : 0;
+
+  cumChart.setOption({
+    backgroundColor:'transparent',
+    tooltip:{trigger:'axis',confine:true,backgroundColor:'rgba(255,255,255,.96)',borderColor:'#c8e0d4',
+      textStyle:{color:'#1a3a2a',fontSize:12},
+      formatter:function(params){
+        let s=`<b>${params[0].axisValue}</b><br/>`;
+        params.forEach(p=>{if(p.value!==null&&p.value!==undefined)s+=`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:4px"></span>${p.seriesName}: <b>${p.value}kg</b><br/>`;});
+        return s;
+      }
+    },
+    legend:{data:entries.map(m=>m.nickname),textStyle:{color:'#4a6a5a',fontSize:11},top:0,left:'center',type:'scroll',pageTextStyle:{color:'#8aaa9a'}},
+    grid:{left:44,right:12,top:46,bottom:56},
+    xAxis:{type:'category',data:allDates.map(d=>d.slice(5)),boundaryGap:false,
+      axisLine:{lineStyle:{color:'#c8e0d4'}},axisLabel:{color:'#8aaa9a',fontSize:11},splitLine:{show:false}},
+    yAxis:{type:'value',name:'累计减重(kg)',nameTextStyle:{color:'#8aaa9a',fontSize:11},
+      axisLine:{lineStyle:{color:'#c8e0d4'}},axisLabel:{color:'#8aaa9a',fontSize:11},
+      splitLine:{lineStyle:{color:'#e8f0ec'}}},
+    dataZoom:[{
+      type:'inside',xAxisIndex:0,start:startPct,end:100,
+      zoomLock:true,
+      moveOnMouseMove:true,moveOnMouseWheel:true,
+      preventDefaultMouseMove:true
+    },{
+      type:'slider',xAxisIndex:0,start:startPct,end:100,
+      height:24,bottom:4,
+      borderColor:'#c8e0d4',fillerColor:'rgba(67,185,127,.18)',
+      handleSize:'120%',
+      handleStyle:{color:'#43b97f',borderColor:'#2d8a5e',borderWidth:1,shadowBlur:4,shadowColor:'rgba(45,138,94,.3)'},
+      moveHandleSize:6,moveHandleStyle:{color:'#43b97f'},
+      textStyle:{color:'#8aaa9a',fontSize:10},
+      dataBackground:{lineStyle:{color:'#c8e0d4'},areaStyle:{color:'rgba(67,185,127,.06)'}},
+      selectedDataBackground:{lineStyle:{color:'#43b97f'},areaStyle:{color:'rgba(67,185,127,.15)'}},
+      brushSelect:false
+    }],
+    series
+  });
+  window.addEventListener('resize',()=>{if(cumChart)cumChart.resize();});
+}
+
+// ===== Settings =====
+function showSettingsModal(){
+  document.getElementById('set-nick-val').textContent=state.nickname;
+  document.getElementById('set-group-val').textContent=state.groupCode;
+  document.getElementById('modal-settings').classList.add('show');
+}
+function showRenameModal(){
+  document.getElementById('input-rename').value=state.nickname;
+  document.getElementById('modal-rename').classList.add('show');
+}
+async function doRename(){
+  const n=document.getElementById('input-rename').value.trim();
+  if(!n)return toast('昵称不能为空');
+  try{
+    const{error}=await db.from('members').update({nickname:n}).eq('id',state.memberId);
+    if(error)throw error;
+    state.nickname=n;
+    const s=JSON.parse(localStorage.getItem('wt_member'));s.nick=n;localStorage.setItem('wt_member',JSON.stringify(s));
+    closeModal('modal-rename');toast('昵称已修改');await loadAllData();renderAll();
+  }catch(e){toast('修改失败');}
+}
+
+// ===== Share =====
+function showShareModal(){
+  const url=location.origin+location.pathname+'?group='+encodeURIComponent(state.groupCode);
+  document.getElementById('share-text').innerHTML=`📢 <b>体重打卡群邀请</b><br><br>我们正在用「体重打卡」互相监督减肥！<br><br>👉 点击链接加入：<br>${url}<br><br>群组口令：<b>${state.groupCode}</b>`;
+  document.getElementById('modal-share').classList.add('show');
+}
+function copyShareText(){
+  const url=location.origin+location.pathname+'?group='+encodeURIComponent(state.groupCode);
+  const text=`📢 体重打卡群邀请\n\n我们正在用「体重打卡」互相监督减肥！\n\n👉 点击链接加入：\n${url}\n\n群组口令：${state.groupCode}`;
+  if(navigator.clipboard){navigator.clipboard.writeText(text).then(()=>toast('已复制到剪贴板'));}
+  else{const t=document.createElement('textarea');t.value=text;document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t);toast('已复制到剪贴板');}
+  closeModal('modal-share');
+}
+
+// ===== Tab =====
+function switchTab(name,el){
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-item').forEach(t=>t.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  el.classList.add('active');
+  if(name==='rank')setTimeout(()=>{renderRankCards();renderCumChart();},50);
+}
+
+// ===== Init =====
+tryAutoLogin();
+</script>
+</body>
+</html>
